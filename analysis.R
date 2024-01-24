@@ -6,6 +6,7 @@ library(rio)
 library(stargazer)
 library(bife)
 library(survival)
+
 # Load data
 msf <- import(here("data", "MSFS-estimates_full-3x2000.csv"))
 msf$MSF <- msf$MSF * 100
