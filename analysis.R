@@ -36,3 +36,9 @@ etable(reg2, se = "twoway", tex = T)
 reg3 <- glm(coup ~ MSF + postcw + MSF*postcw + soquall + lmilper + chgdp + lgdppcl + dem + auth + powthy_peace + instab + factor(ccode) + factor(year), family = binomial(link = "logit"), data = df_coup)
 summary(reg3)
 stargazer(reg3, type = "text")
+
+# interaction plot
+library(interplot)
+int_1 <- interplot(m = reg3, var1 = "MSF", var2 = "postcw") +
+  labs(x = "Post cold war dummy", y = "Media Freedom", title = "Interaction plot")
+print(int_1)
