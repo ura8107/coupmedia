@@ -1,0 +1,74 @@
+---
+title: "Main"
+author: "Yuki Matsuura"
+date: "2024-06-20"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+```{r}
+library(tidyverse)
+library(dplyr)
+library(ggplot2)
+library(here)
+library(rio)
+library(stargazer)
+library(fixest)
+library(haven)
+library(interplot)
+```
+
+```{r}
+## Load data set
+msf <- read_csv("data/MSFS-estimates_full-3x2000.csv") # Solis & Waggoner (2021)
+gmfd <- read_csv("data/GMFD_V2.csv") # Whitten-Woodring & Van Belle (2017)
+colpus <- read_dta("data/Master_Coup List_all regimes_basic.dta") # Chin et al. (2021)
+powell <- read_dta("data/determinants_replication.dta") # Powell (2012), for covariates
+coup <- read.table(file = "data/powell_thyne_ccode_year.txt",
+                   header = TRUE,
+                   sep = "\t") # Powell & Thyne (2011)
+```
+
+```{r}
+## Merging data sets
+df_coup <- left_join(x = coup, y = msf, by = c("ccode", "year")) %>% 
+  left_join(y = powell, by = c("ccode", "year")) %>% 
+  mutate(coup = ifelse(coup1 >= 1, 1, 0)) %>% 
+  mutate(postcw = ifelse(year >= 1990, 1, 0))
+```
+
+## Analysis
+```{r}
+## fixest
+formula <- formula(coup ~ MSF + postcw + MSF:postcw + soquall + lmilper + 
+                     lgdppcl + dem + auth + instab)
+reg <- feglm(fml = formula, 
+             data = df_coup, 
+             family = binomial(link = "logit"),
+             cluster = c("ccode", "year"))
+summary(reg)
+etable(reg)
+
+## Logit
+formula_fe <- formula(coup ~ MSF + postcw + MSF:postcw + soquall + lmilper + 
+                        lgdppcl + dem + auth + instab + factor(ccode) + factor(year))
+reg <- glm(formula = formula_fe, 
+           data = df_coup, 
+           family = binomial(link = "logit"))
+summary(reg)
+stargazer(reg, type = "text")
+```
+
+```{r}
+## Interaction plot
+interplot(m = reg, var1 = "MSF", var2 = "postcw") +
+  labs(x = "Post cold war dummy", 
+       y = "Media Freedom", 
+       title = "Interaction plot") %>% 
+  print()
+```
+
