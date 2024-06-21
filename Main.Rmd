@@ -20,6 +20,10 @@ library(stargazer)
 library(fixest)
 library(haven)
 library(interplot)
+library(tidyfit)
+library(PanelMatch)
+library(lmtest)
+library(sandwich)
 ```
 
 ```{r}
@@ -35,7 +39,9 @@ coup <- read.table(file = "data/powell_thyne_ccode_year.txt",
 
 ```{r}
 ## Merging data sets
-df_coup <- left_join(x = coup, y = msf, by = c("ccode", "year")) %>% 
+df_coup <- left_join(x = coup, 
+                     y = msf, 
+                     by = c("ccode", "year")) %>% 
   left_join(y = powell, by = c("ccode", "year")) %>% 
   mutate(coup = ifelse(coup1 >= 1, 1, 0)) %>% 
   mutate(postcw = ifelse(year >= 1990, 1, 0))
@@ -70,5 +76,47 @@ interplot(m = reg, var1 = "MSF", var2 = "postcw") +
        y = "Media Freedom", 
        title = "Interaction plot") %>% 
   print()
+```
+
+```{r}
+## Linear probability model
+reg <- lm(formula = coup ~ MSF + postcw + MSF:postcw + soquall + lmilper + 
+            lgdppcl + dem + auth + instab+ factor(ccode) + factor(year), 
+          data = df_coup)
+summary(reg)
+
+ggplot(data = df_coup,
+       mapping = aes(x = MSF, y = coup)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE)
+
+data.frame(pred = reg$fitted.values, 
+           res2 = reg$residuals^2) %>%
+  ggplot(.,
+         mapping = aes(x = pred, y = res2)) +
+  geom_point()
+
+vv <- vcovHC(reg, type = "HC1")
+coeftest(reg, vcov = vv)
+```
+
+```{r}
+## Rolling window analysis
+mod_frame <- df_coup %>% 
+  group_by(ccode) %>% 
+  regress(formula = coup ~ MSF + postcw + MSF:postcw + soquall + lmilper + 
+             lgdppcl + dem + auth + instab,
+          m("glm", family = binomial(link = "logit")))
+```
+
+```{r}
+## PanelMatch
+DisplayTreatment(unit.id = "ccode",
+                 time.id = "year",
+                 legend.position = "none",
+                 xlab = "Year",
+                 ylab = "County",
+                 treatment = "coup",
+                 data = df_coup)
 ```
 
