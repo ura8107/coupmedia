@@ -21,9 +21,9 @@ library(fixest)
 library(haven)
 library(interplot)
 library(tidyfit)
-library(PanelMatch)
 library(lmtest)
 library(sandwich)
+library(countrycode)
 ```
 
 ```{r}
@@ -47,21 +47,51 @@ df_coup <- left_join(x = coup,
   mutate(postcw = ifelse(year >= 1990, 1, 0))
 ```
 
+
+```{r}
+## Mass protest from Vdem data
+library(vdemdata)
+df_vdem <- vdem %>% 
+  filter(year >= 1945) %>% 
+  mutate(ccode = countrycode(sourcevar = country_name,
+                             origin = "country.name",
+                             destination = "cown")) %>% 
+  dplyr::select(country_name, ccode, year, v2casoe_5)
+df_coup <- left_join(x = df_coup,
+                     y = df_vdem,
+                     by = c("ccode", "year"))
+```
+
 ## Analysis
+## Bivariate analysis
+```{r}
+reg1 <- feglm(fml = coup ~ MSF,
+             data = df_coup,
+             family = binomial("logit"),
+             cluster = c("ccode", "year"))
+summary(reg1)
+etable(reg1, se = "twoway", cluster = c("ccode", "year"))
+esttex(reg1,
+       title = "Bivariate analysis",
+       label = "tab:bivariate")
+```
+
+
 ```{r}
 ## fixest
 formula <- formula(coup ~ MSF + postcw + MSF:postcw + soquall + lmilper + 
-                     lgdppcl + dem + auth + instab)
-reg <- feglm(fml = formula, 
+                     chgdp + lgdppcl + dem + auth + instab)
+reg2 <- feglm(fml = formula, 
              data = df_coup, 
              family = binomial(link = "logit"),
              cluster = c("ccode", "year"))
-summary(reg)
-etable(reg)
+summary(reg2)
+etable(reg1, reg2)
 
 ## Logit
 formula_fe <- formula(coup ~ MSF + postcw + MSF:postcw + soquall + lmilper + 
-                        lgdppcl + dem + auth + instab + factor(ccode) + factor(year))
+                        chgdp + lgdppcl + dem + auth + instab +
+                        factor(ccode) + factor(year))
 reg <- glm(formula = formula_fe, 
            data = df_coup, 
            family = binomial(link = "logit"))
@@ -76,6 +106,58 @@ interplot(m = reg, var1 = "MSF", var2 = "postcw") +
        y = "Media Freedom", 
        title = "Interaction plot") %>% 
   print()
+```
+
+```{r}
+## 
+
+## fixest (milreg maybe the key?)
+formula <- formula(coup ~ MSF + postcw + MSF:postcw + chgdp + lgdppcl +
+                     dem + auth + milreg + instab)
+reg <- feglm(fml = formula,
+             data = df_coup,
+             family = binomial(link = "logit"),
+             cluster = c("ccode", "year"))
+summary(reg)
+etable(reg)
+
+## Logit
+formula_fe <- formula(coup ~ MSF + postcw + MSF:postcw + chgdp + lgdppcl +
+                        dem + auth + instab +
+                        factor(year) + factor(ccode))
+reg <- glm(formula = formula_fe,
+           data = df_coup,
+           family = binomial(link = "logit"))
+summary(reg)
+stargazer(reg, type = "text")
+```
+
+```{r}
+## Only colpus countries (only significant with logit model)
+df_coup_colpus <- df_coup %>% 
+  filter(ccode %in% unique(colpus$ccode)) %>% 
+  filter(!is.na(MSF)) %>% 
+  filter(postcw == 1)
+
+## fixest
+formula <- formula(coup ~ MSF + soquall + lmilper + 
+                     lgdppcl + dem + auth + instab)
+reg <- feglm(fml = formula,
+             data = df_coup_colpus,
+             family = binomial(link = "logit"),
+             cluster = c("ccode", "year"))
+summary(reg)
+etable(reg)
+
+## Logit
+formula_fe <- formula(coup ~ MSF +soquall + lmilper + lgdppcl +
+                        dem + auth + instab +
+                        factor(ccode) + factor(year))
+reg <- glm(formula = formula_fe,
+           data = df_coup_colpus,
+           family = binomial(link = "logit"))
+summary(reg)
+stargazer(reg, type = "text")
 ```
 
 ```{r}
@@ -108,15 +190,3 @@ mod_frame <- df_coup %>%
              lgdppcl + dem + auth + instab,
           m("glm", family = binomial(link = "logit")))
 ```
-
-```{r}
-## PanelMatch
-DisplayTreatment(unit.id = "ccode",
-                 time.id = "year",
-                 legend.position = "none",
-                 xlab = "Year",
-                 ylab = "County",
-                 treatment = "coup",
-                 data = df_coup)
-```
-
